@@ -47,12 +47,35 @@ pip install -r requirements.txt
 Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+
+ 90 min available · 65 min planned · 25 min free
+
+ TIME           PET    TASK              MIN  PRIORITY  REPEATS
+ ─────────────  ─────  ────────────────  ───  ────────  ───────
+ 08:00 – 08:05  Luna   Give medication     5  HIGH      daily
+ 08:05 – 08:35  Rex    Morning walk       30  HIGH      daily
+ 08:35 – 08:45  Luna   Feed breakfast     10  MEDIUM    daily
+ 08:45 – 09:05  Luna   Play session       20  LOW       once
+
+ Skipped (1)
+ - Grooming (Rex, 40 min, LOW) — low priority, but not enough time left after higher-priority tasks.
+
 ```
+
+## Implementation summary
+
+`pawpal_system.py` turns an owner's daily time budget and their pets' care tasks into a prioritized daily plan, with a reason for each choice.
+
+- **Task**: a care item with a title, duration, priority, frequency, and completed flag.
+- **Pet**: a name, species, and list of tasks.
+- **Owner**: a name, daily time budget, and list of pets. `get_all_tasks()` returns every pet's tasks together.
+- **Scheduler**: reads from `owner.get_all_tasks()`, skips completed tasks, sorts by priority (shorter first on ties), and fits tasks into the time available.
+- **Plan**: the result. It holds the scheduled tasks (with start times and reasons), the skipped tasks (with reasons), and total minutes used.
+
+
+
+
+
 
 ## 🧪 Testing PawPal+
 
