@@ -69,10 +69,22 @@ Paste a sample of your app's CLI or Streamlit output here so a reader can see wh
 - **Task**: a care item with a title, duration, priority, frequency, and completed flag.
 - **Pet**: a name, species, and list of tasks.
 - **Owner**: a name, daily time budget, and list of pets. `get_all_tasks()` returns every pet's tasks together.
-- **Scheduler**: reads from `owner.get_all_tasks()`, skips completed tasks, sorts by priority (shorter first on ties), and fits tasks into the time available.
-- **Plan**: the result. It holds the scheduled tasks (with start times and reasons), the skipped tasks (with reasons), and total minutes used.
+- **Scheduler**: reads from `owner.get_all_tasks()`, skips completed tasks, sorts by priority then time, and fits tasks into the time available.
+- **Plan**: the result. It holds the scheduled tasks (with start times and reasons), the skipped tasks (with reasons), total minutes used, and any conflict warnings.
 
+## Features
 
+- **Priority-first scheduling**: tasks are chosen High, then Medium, then Low. Among equal priorities, tasks with a fixed time come first in time order, then untimed tasks, then the shorter task wins.
+- **Time budget**: tasks are taken in that order until the owner's daily minutes run out. A task that doesn't fit is skipped with a reason, and smaller tasks after it can still fit.
+- **Sorting by time**: any list of tasks can be ordered by start time, with untimed tasks last.
+- **Gap placement**: fixed-time tasks keep their time. Untimed tasks go in the earliest free gap, so the scheduler never creates a conflict by itself.
+- **Conflict warnings**: any two planned tasks whose time ranges overlap, for the same pet or different pets, produce a warning message. Back-to-back tasks are fine. Nothing is moved and the program does not crash.
+- **Filtering**: tasks can be filtered by pet, by completion status, or both.
+- **Multiple pets**: one owner can have many pets, and the scheduler plans across all of them.
+- **Daily and weekly recurrence**: completing a daily or weekly task creates the next copy, due 1 or 7 days later (`timedelta`). One-time tasks create none.
+- **Explanations**: every scheduled or skipped task has a short reason.
+
+#
 
 
 
@@ -84,7 +96,6 @@ Paste a sample of your app's CLI or Streamlit output here so a reader can see wh
 python -m pytest
 ```
 
-Add `-v` to list each test. The suite lives in `tests/test_pawpal.py` (54 tests) and uses a fixed date, so results don't change from day to day.
 
 Output of the sorting, recurrence, and conflict tests:
 
@@ -153,3 +164,45 @@ Example indicators (colors appear in an interactive terminal):
 [WARN] Conflict: 'Give medication' overlaps 'Morning walk'
 [DONE] Completed 'Morning walk'. Next one is due tomorrow.
 ```
+
+# Priority scheduling
+
+Priority decides which tasks get the limited time. Time only breaks ties. Output below is from `python3 main.py` (text, not a screenshot).
+
+Jordan has 90 minutes and six tasks. The low-priority grooming (40 min) is the one that doesn't fit:
+
+```
+Today's Schedule — Jordan
+   90 min available · 75 min planned · 15 min free
+
+ TIME           PET    TASK              MIN  PRIORITY  REPEATS
+ ─────────────  ─────  ────────────────  ───  ────────  ───────
+ [PLAN] 08:00 – 08:10  Luna   Feed breakfast     10  MEDIUM    daily
+ [PLAN] 08:10 – 08:30  Luna   Play session       20  LOW       once
+ [PLAN] 08:30 – 08:35  Luna   Give medication     5  HIGH      daily
+ [PLAN] 08:30 – 09:00  Rex    Morning walk       30  HIGH      daily
+ [PLAN] 18:00 – 18:10  Luna   Evening feed       10  MEDIUM    daily
+
+ Skipped (1)
+ [SKIP] Grooming (Rex, 40 min, LOW) — low priority, but not enough time left after higher-priority tasks.
+
+ Warnings (1)
+ [WARN] Conflict: 'Give medication' (Luna, 08:30-08:35) overlaps 'Morning walk' (Rex, 08:30-09:00).
+```
+
+The schedule is shown in time order, but the High tasks were chosen first.
+
+Priority, then time, with only 50 minutes free and three High tasks plus one Low task (two High tasks have fixed times):
+
+```
+Evening walk  HIGH  18:00  30 min
+Morning walk  HIGH  08:30  30 min
+Feed          HIGH  any    20 min
+Play          LOW   any    10 min
+
+Scheduled: Feed, Morning walk
+Skipped:   Evening walk, Play
+```
+
+All three High tasks beat the Low one. Among them, the 08:30 task is chosen before the 18:00 one, and the untimed task comes after the fixed ones. The 50 minutes run out, so the evening walk and the Low task are skipped.
+

@@ -139,6 +139,23 @@ if all_tasks:
         st.caption(f"Showing {len(shown)} of {len(all_tasks)} tasks, sorted by time.")
     else:
         st.info("No tasks match these filters.")
+
+    remove_col, button_col = st.columns([3, 1], vertical_alignment="bottom")
+    with remove_col:
+        to_remove = st.selectbox(
+            "Remove a task",
+            [f"{t.pet_name}: {t.title}" for t in all_tasks],
+        )
+    with button_col:
+        remove_clicked = st.button("Remove task")
+    if remove_clicked:
+        pet_to_clean, title_to_remove = to_remove.split(": ", 1)
+        try:
+            owner.get_pet(pet_to_clean).remove_task(title_to_remove)
+        except KeyError as e:
+            st.error(str(e))
+        else:
+            st.rerun()
 else:
     st.info("No tasks yet. Add one above.")
 

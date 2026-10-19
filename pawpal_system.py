@@ -429,8 +429,20 @@ class Scheduler:
         return warnings
 
     def _sort_by_priority(self, tasks: list[Task]) -> list[Task]:
-        """Return tasks ordered from highest to lowest priority (shorter first on ties)."""
-        return sorted(tasks, key=lambda t: (-t.priority, t.duration_minutes))
+        """Return tasks ordered by priority (highest first), then by scheduled time.
+
+        Among equal priorities, tasks with a fixed time come first in time order, then
+        untimed tasks; remaining ties go to the shorter task.
+        """
+        return sorted(
+            tasks,
+            key=lambda t: (
+                -t.priority,
+                t.scheduled_time is None,
+                t.scheduled_time or "",
+                t.duration_minutes,
+            ),
+        )
 
     def _fits_in_time(self, task: Task, minutes_used: int) -> bool:
         """Return True if the task still fits in the owner's remaining time."""
