@@ -330,3 +330,218 @@ def test_owner_with_no_pets_gets_an_empty_plan():
     plan = make_scheduler(Owner("Jordan", 60)).generate_plan()
 
     assert plan.scheduled == [] and plan.skipped == [] and plan.total_minutes == 0
+
+
+# --- Edge cases: sorting --------------------------------------------------
+
+
+def test_sort_by_time_with_no_tasks_returns_empty_list():
+    assert make_scheduler(make_owner()).sort_by_time([]) == []
+
+
+def test_plan_for_pets_with_no_tasks_is_empty():
+    plan = make_scheduler(make_owner()).generate_plan()
+
+    assert plan.scheduled == [] and plan.skipped == [] and plan.warnings == []
+
+
+def test_sort_by_time_keeps_original_order_for_equal_times():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    rex.add_task(Task("First", 10, Priority.LOW, scheduled_time="09:00"))
+    rex.add_task(Task("Second", 10, Priority.HIGH, scheduled_time="09:00"))
+
+    ordered = make_scheduler(owner).sort_by_time(owner.get_all_tasks())
+
+    assert titles(ordered) == ["First", "Second"]
+
+
+def test_sort_by_time_handles_midnight_and_last_minute():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    rex.add_task(Task("Late", 1, Priority.LOW, scheduled_time="23:59"))
+    rex.add_task(Task("Early", 1, Priority.LOW, scheduled_time="00:00"))
+
+    ordered = make_scheduler(owner).sort_by_time(owner.get_all_tasks())
+
+    assert titles(ordered) == ["Early", "Late"]
+
+
+def test_plan_is_in_chronological_order():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    rex.add_task(Task("Evening", 10, Priority.HIGH, scheduled_time="18:00"))
+    rex.add_task(Task("Morning", 10, Priority.LOW, scheduled_time="08:30"))
+    rex.add_task(Task("Noon", 10, Priority.MEDIUM, scheduled_time="12:00"))
+
+    plan = make_scheduler(owner).generate_plan()
+
+    assert titles(i.task for i in plan.scheduled) == ["Morning", "Noon", "Evening"]
+
+
+@pytest.mark.parametrize("bad_time", ["25:00", "12:60", "abc", "", "8", "12:30:00"])
+def test_invalid_scheduled_time_is_rejected(bad_time):
+    with pytest.raises(ValueError):
+        Task("Walk", 10, Priority.LOW, scheduled_time=bad_time)
+
+
+# --- Edge cases: recurrence -----------------------------------------------
+
+
+def test_daily_recurrence_rolls_over_the_year_end():
+    pet = Pet("Rex", "dog")
+    pet.add_task(Task("Walk", 30, Priority.HIGH, Frequency.DAILY))
+
+    new_task = pet.complete_task("Walk", today=date(2026, 12, 31))
+
+    assert new_task.due_date == date(2027, 1, 1)
+
+
+def test_weekly_recurrence_rolls_over_a_leap_day():
+    pet = Pet("Rex", "dog")
+    pet.add_task(Task("Groom", 40, Priority.LOW, Frequency.WEEKLY))
+
+    new_task = pet.complete_task("Groom", today=date(2028, 2, 25))
+
+    assert new_task.due_date == date(2028, 3, 3)
+
+
+def test_finishing_a_recurring_task_late_restarts_from_today():
+    pet = Pet("Rex", "dog")
+    pet.add_task(
+        Task("Walk", 30, Priority.HIGH, Frequency.DAILY, due_date=TODAY - timedelta(days=5))
+    )
+
+    new_task = pet.complete_task("Walk", today=TODAY)
+
+    assert new_task.due_date == TODAY + timedelta(days=1)
+
+
+def test_recurring_task_appears_in_the_plan_on_its_due_day_only():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    rex.add_task(Task("Walk", 30, Priority.HIGH, Frequency.DAILY))
+    rex.complete_task("Walk", today=TODAY)
+    tomorrow = TODAY + timedelta(days=1)
+
+    today_plan = make_scheduler(owner).generate_plan()
+    tomorrow_plan = Scheduler(owner, "08:00", plan_date=tomorrow).generate_plan()
+
+    assert today_plan.scheduled == []
+    assert titles(i.task for i in tomorrow_plan.scheduled) == ["Walk"]
+
+
+def test_completing_a_recurring_task_twice_does_not_add_a_second_copy():
+    pet = Pet("Rex", "dog")
+    pet.add_task(Task("Walk", 30, Priority.HIGH, Frequency.DAILY))
+    pet.complete_task("Walk", today=TODAY)
+
+    pet.complete_task("Walk", today=TODAY)
+
+    assert len([t for t in pet.get_tasks() if not t.completed]) == 1
+
+
+def test_is_due_boundaries():
+    assert Task("A", 5, Priority.LOW).is_due(TODAY)  # no due date
+    assert Task("B", 5, Priority.LOW, due_date=TODAY).is_due(TODAY)
+    assert Task("C", 5, Priority.LOW, due_date=TODAY - timedelta(days=1)).is_due(TODAY)
+    assert not Task("D", 5, Priority.LOW, due_date=TODAY + timedelta(days=1)).is_due(TODAY)
+
+    done = Task("E", 5, Priority.LOW)
+    done.mark_complete()
+    assert not done.is_due(TODAY)
+
+
+# --- Edge cases: conflicts and budget -------------------------------------
+
+
+def test_fully_contained_task_gives_a_warning():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    rex.add_task(Task("Long", 60, Priority.HIGH, scheduled_time="09:00"))
+    rex.add_task(Task("Short", 10, Priority.LOW, scheduled_time="09:20"))
+
+    assert len(make_scheduler(owner).generate_plan().warnings) == 1
+
+
+def test_three_way_overlap_gives_one_warning_per_pair():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    for name in ("A", "B", "C"):
+        rex.add_task(Task(name, 30, Priority.HIGH, scheduled_time="09:00"))
+
+    assert len(make_scheduler(owner).generate_plan().warnings) == 3
+
+
+def test_conflict_is_not_resolved_by_dropping_or_moving_tasks():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    rex.add_task(Task("Walk", 30, Priority.HIGH, scheduled_time="08:30"))
+    rex.add_task(Task("Bath", 20, Priority.LOW, scheduled_time="08:30"))
+
+    plan = make_scheduler(owner).generate_plan()
+
+    assert {i.start_time for i in plan.scheduled} == {"08:30"}
+
+
+def test_task_exactly_filling_the_budget_is_scheduled():
+    owner = make_owner(minutes=30)
+    owner.get_pet("Rex").add_task(Task("Walk", 30, Priority.HIGH))
+
+    plan = make_scheduler(owner).generate_plan()
+
+    assert titles(i.task for i in plan.scheduled) == ["Walk"]
+    assert plan.skipped == []
+
+
+def test_task_one_minute_over_the_budget_is_skipped():
+    owner = make_owner(minutes=30)
+    owner.get_pet("Rex").add_task(Task("Walk", 31, Priority.HIGH))
+
+    plan = make_scheduler(owner).generate_plan()
+
+    assert plan.scheduled == []
+    assert titles(i.task for i in plan.skipped) == ["Walk"]
+
+
+def test_zero_minute_budget_skips_everything():
+    owner = make_owner(minutes=0)
+    owner.get_pet("Rex").add_task(Task("Walk", 5, Priority.HIGH))
+
+    plan = make_scheduler(owner).generate_plan()
+
+    assert plan.scheduled == [] and len(plan.skipped) == 1
+
+
+def test_untimed_task_fits_in_a_gap_of_exactly_its_length():
+    owner = make_owner()
+    rex = owner.get_pet("Rex")
+    rex.add_task(Task("Feed", 30, Priority.HIGH))
+    rex.add_task(Task("Vet", 30, Priority.HIGH, scheduled_time="08:30"))
+
+    plan = make_scheduler(owner).generate_plan()
+    starts = {i.task.title: i.start_time for i in plan.scheduled}
+
+    assert starts["Feed"] == "08:00"
+    assert plan.warnings == []
+
+
+# --- Edge cases: editing --------------------------------------------------
+
+
+def test_invalid_update_leaves_the_task_unchanged():
+    task = Task("Walk", 30, Priority.HIGH, scheduled_time="08:30")
+
+    with pytest.raises(ValueError):
+        task.update(title="Run", duration_minutes=-5)
+
+    assert (task.title, task.duration_minutes, task.scheduled_time) == ("Walk", 30, "08:30")
+
+
+def test_editing_or_removing_a_missing_task_raises_key_error():
+    pet = Pet("Rex", "dog")
+
+    with pytest.raises(KeyError):
+        pet.edit_task("Missing", {"duration_minutes": 5})
+    with pytest.raises(KeyError):
+        pet.remove_task("Missing")
