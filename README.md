@@ -58,7 +58,7 @@ Paste a sample of your app's CLI or Streamlit output here so a reader can see wh
  08:45 – 09:05  Luna   Play session       20  LOW       once
 
  Skipped (1)
- - Grooming (Rex, 40 min, LOW) — low priority, but not enough time left after higher-priority tasks.
+- Grooming (Rex, 40 min, LOW) — low priority, but not enough time left after higher-priority tasks.
 
 ```
 
@@ -133,14 +133,23 @@ Each feature below names the method in `pawpal_system.py` that implements it.
 | Due-date check | `Task.is_due` | A task is planned only if it is not done and due on or before the plan date. |
 | Explanations | `Scheduler._explain` | Gives a short reason each task was scheduled or skipped. |
 
-## 📸 Demo Walkthrough
+## Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+PawPal+ puts owner availability, pets, care tasks, and today's plan on one page. Set the owner's name and daily minutes, add pets by name and species, then add tasks with a duration, priority, repeat frequency, and optionally a fixed start time. The task list can be filtered by pet and pending/completed status; it is sorted by time, with tasks that have no fixed time listed last.
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+For a typical workflow, add Mochi as a dog, then create a daily 30-minute **Morning walk** with a fixed 08:30 start. Add a 10-minute breakfast task without a fixed time, then choose **Generate schedule** under **Today's Schedule**. The schedule displays planned times, task details, and reasons, along with total planned/free minutes and any tasks that were skipped. Add a second pet and give it a task fixed at 08:30 to see a conflict warning.
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+The scheduler selects tasks due today by priority, preferring shorter tasks when priorities tie, until the daily time budget is used. A task that does not fit is skipped, but scheduling continues in case a shorter task later in the priority order will fit. Fixed-time tasks keep their chosen times; tasks without a time are placed in the earliest available gap. The resulting plan is shown chronologically. Overlapping tasks produce warnings, including overlaps between different pets; the scheduler reports conflicts without moving or dropping tasks.
+
+### Professional UI and Output Formatting
+
+ adds readable status labels and terminal colors for task status and priority. Colors are limited to interactive terminals and can be disabled with NO_COLOR; the feature uses Python’s standard library and requires no extra packages.
+
+Example indicators (colors appear in an interactive terminal):
+
+```text
+[PLAN] 08:00 – 08:10  Luna   Feed breakfast     10  MEDIUM    daily
+[SKIP] Grooming (Rex, 40 min, LOW) — not enough time left
+[WARN] Conflict: 'Give medication' overlaps 'Morning walk'
+[DONE] Completed 'Morning walk'. Next one is due tomorrow.
+```

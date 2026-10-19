@@ -1,6 +1,21 @@
 from datetime import date
+import os
+import sys
 
 from pawpal_system import Frequency, Owner, Pet, PlannedTask, Priority, Scheduler, Task
+
+
+def colorize(text: str, color_code: str) -> str:
+    """Add ANSI color in interactive terminals unless NO_COLOR is set."""
+    if not sys.stdout.isatty() or "NO_COLOR" in os.environ:
+        return text
+    return f"\033[{color_code}m{text}\033[0m"
+
+
+def priority_label(priority: Priority, width: int = 8) -> str:
+    """Return a priority label colored by urgency when supported."""
+    colors = {Priority.HIGH: "31", Priority.MEDIUM: "33", Priority.LOW: "32"}
+    return colorize(f"{priority.name:<{width}}", colors[priority])
 
 
 def end_time(item: PlannedTask) -> str:
@@ -24,8 +39,9 @@ def print_schedule(owner: Owner, plan) -> None:
     for item in plan.scheduled:
         task = item.task
         print(
-            f" {item.start_time} – {end_time(item)}  {item.pet_name:<5}  {task.title:<16}  "
-            f"{task.duration_minutes:>3}  {task.priority.name:<8}  {task.frequency.value}"
+            f" {colorize('[PLAN]', '32')} {item.start_time} – {end_time(item)}  "
+            f"{item.pet_name:<5}  {task.title:<16}  {task.duration_minutes:>3}  "
+            f"{priority_label(task.priority)}  {task.frequency.value}"
         )
 
     if plan.skipped:
@@ -34,14 +50,14 @@ def print_schedule(owner: Owner, plan) -> None:
             task = item.task
             reason = item.reason.removeprefix("Skipped: ")
             print(
-                f" - {task.title} ({item.pet_name}, {task.duration_minutes} min, "
-                f"{task.priority.name}) — {reason}"
+                f" {colorize('[SKIP]', '33')} {task.title} ({item.pet_name}, "
+                f"{task.duration_minutes} min, {priority_label(task.priority, width=0)}) — {reason}"
             )
 
     if plan.warnings:
         print(f"\n Warnings ({len(plan.warnings)})")
         for warning in plan.warnings:
-            print(f" ! {warning}")
+            print(f" {colorize('[WARN]', '31')} {warning}")
     print()
 
 
@@ -52,7 +68,7 @@ def print_tasks(heading: str, tasks) -> None:
     for t in tasks:
         when = t.scheduled_time or "any time"
         due = t.due_date.isoformat() if t.due_date else "-"
-        status = "done" if t.completed else "pending"
+        status = colorize("[DONE]", "32") if t.completed else colorize("[PENDING]", "33")
         print(f"   {t.pet_name:<5} {t.title:<16} {when:<9} due {due:<10} {status}")
 
 
@@ -87,7 +103,10 @@ def main() -> None:
 
     # 4. Recurring tasks: finishing a daily task creates tomorrow's copy
     next_walk = rex.complete_task("Morning walk", today=today)
-    print(f"Completed 'Morning walk'. Next one is due {next_walk.due_date}.")
+    print(
+        f"{colorize('[DONE]', '32')} Completed 'Morning walk'. "
+        f"Next one is due {next_walk.due_date}."
+    )
     print_tasks(
         "Rex's pending tasks after completing the walk:",
         owner.filter_tasks(pet_name="Rex", completed=False),

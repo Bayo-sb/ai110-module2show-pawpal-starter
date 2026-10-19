@@ -1,0 +1,101 @@
+classDiagram
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    class Frequency {
+        <<enumeration>>
+        ONCE
+        DAILY
+        WEEKLY
+    }
+
+    class Task {
+        +str title
+        +int duration_minutes
+        +Priority priority
+        +Frequency frequency
+        +bool completed
+        +str scheduled_time
+        +date due_date
+        +str pet_name
+        +update(...) None
+        +mark_complete() None
+        +is_due(on) bool
+        +next_occurrence(today) Task
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +list~Task~ tasks
+        +add_task(task) None
+        +edit_task(title, updates) None
+        +remove_task(title) None
+        +complete_task(title, today) Task
+        +get_tasks() list~Task~
+        -_find(title) Task
+    }
+
+    class Owner {
+        +str name
+        +int available_minutes_per_day
+        +dict preferences
+        +list~Pet~ pets
+        +add_pet(pet) None
+        +remove_pet(name) None
+        +get_pet(name) Pet
+        +get_all_tasks() list~Task~
+        +filter_tasks(pet_name, completed) list~Task~
+        +update_preferences(preferences) None
+    }
+
+    class PlannedTask {
+        +Task task
+        +str start_time
+        +str reason
+        +pet_name() str
+    }
+
+    class SkippedTask {
+        +Task task
+        +str reason
+        +pet_name() str
+    }
+
+    class Plan {
+        +list~PlannedTask~ scheduled
+        +list~SkippedTask~ skipped
+        +int total_minutes
+        +list~str~ warnings
+    }
+
+    class Scheduler {
+        +Owner owner
+        +str day_start
+        +date plan_date
+        +generate_plan() Plan
+        +sort_by_time(tasks) list~Task~
+        +detect_conflicts(items) list~str~
+        -_place(tasks) list~PlannedTask~
+        -_first_gap(duration, busy) int
+        -_sort_by_priority(tasks) list~Task~
+        -_fits_in_time(task, minutes_used) bool
+        -_explain(task, scheduled) str
+    }
+
+    Owner "1" --> "0..*" Pet : owns
+    Pet "1" o-- "0..*" Task : has
+    Task ..> Priority
+    Task ..> Frequency
+    Pet ..> Task : creates next occurrence
+    Scheduler ..> Owner : get_all_tasks()
+    Scheduler ..> Task : is_due()
+    Scheduler ..> Plan : creates
+    Plan "1" o-- "0..*" PlannedTask
+    Plan "1" o-- "0..*" SkippedTask
+    PlannedTask --> Task : wraps
+    SkippedTask --> Task : wraps
